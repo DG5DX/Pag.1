@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gastos Semanales</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+    <h1 id="Titulo">Gasto Semanal</h1>
+    <div class="Contenedor">
+        <div class="Gastos">
+            <h3 id="TGastos">Añade tus gastos aquí</h3>
+            <h4>Gasto:</h4>
+            <input type="text" id="Nombre_Gasto" placeholder="Nombre Gasto" disabled>
+            <h4>Cantidad:</h4>
+            <input type="number" id="Cantidad" placeholder="Cantidad en $" step="0.01" disabled> <br>
+            <button onclick="Enviar()" id="Boton" disabled>Agregar</button>
+        </div>
+        <div class="Listado">
+            <h3 id="TListado">Listado</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Gasto</th>
+                        <th>Cantidad</th>
+                        <th>Opciones</th>
+                    </tr>
+                </thead>
+                <tbody id="CuerpoTabla">
+                </tbody>
+            </table>
+            <div>
+                <h3 class="Pre">Presupuesto: $</h3>
+                <h3 class="Res">Restante: $</h3>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        let data = [];
+        let presupuesto = null;
+        let indiceEditar = null;
+
+        window.onload = function() {
+            Swal.fire({
+                title: 'Presupuesto inicial',
+                input: 'number',
+                inputLabel: 'Por favor, ingrese su presupuesto inicial:',
+                inputPlaceholder: 'Presupuesto',
+                inputValidator: (value) => {
+                    if (!value) {
+                        return 'Debe ingresar un valor!';
+                    } else if (parseInt(value) <= 0) {
+                        return 'El presupuesto debe ser mayor que cero!';
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    presupuesto = parseInt(result.value);
+                    actualizarPresupuesto();
+                    habilitarInputs();
+                }
+            });
+        };
+
+        function actualizarPresupuesto() {
+            const restante = data.reduce((sum, gasto) => sum - parseFloat(gasto.cantidad), presupuesto);
+            const porcentajeRestante = (restante / presupuesto) * 100;
+
+            document.querySelector(".Pre").textContent = `Presupuesto: ${formatoMoneda(presupuesto)}`;
+            document.querySelector(".Res").textContent = `Restante: ${formatoMoneda(restante)}`;
+
+            let resClass = document.querySelector(".Res");
+
+            if (porcentajeRestante <= 20.00 && porcentajeRestante > 0) {
+                resClass.style.backgroundColor = "orange";
+            } else if (porcentajeRestante <= 0) {
+                resClass.style.backgroundColor = "red";
+                if (restante === 0) {
+                    mostrarAlerta("Presupuesto Agotado", "El presupuesto ha llegado a 0.", "warning");
+                }
+                if (restante < 0) {
+                    mostrarAlerta("Presupuesto Excedido", "No podras agregar más gastos hasta que edites o elimines.", "error");
+                }
+            } else {
+                resClass.style.backgroundColor = "greenyellow";
+            }
+
+            if (presupuesto <= 0 || restante <= 0) {
+                document.getElementById("Boton").disabled = data.length === 0;
+            } else {
+                document.getElementById("Boton").disabled = false;
+            }
+        }
+
+        function formatoMoneda(valor) {
+            return valor.toLocaleString('es-CO', {
+                style: 'currency',
+                currency: 'COP'
+            });
+        }
+
+        function Enviar() {
+            let gasto = document.getElementById("Nombre_Gasto").value.trim();
+            let cantidad = parseFloat(document.getElementById("Cantidad").value.trim());
+
+            if (gasto === "") {
+                mostrarAlerta("Campo sin rellenar", "Por favor digite el nombre del gasto", "question");
+                return;
+            } else if (isNaN(cantidad) || cantidad <= 0) {
+                mostrarAlerta("Cantidad inválida", "La cantidad debe ser mayor que cero", "error");
+                return;
+            }
+
+            const restante = data.reduce((sum, gasto) => sum - parseFloat(gasto.cantidad), presupuesto);
+            if (restante - cantidad < 0 && indiceEditar === null) {
+                mostrarAlerta("Presupuesto Excedido", "Este gasto excede el presupuesto restante.", "error");
+                return;
+            }
+
+            if (indiceEditar === null) {
+                data.push({ gasto, cantidad });
+            } else {
+                data[indiceEditar] = { gasto, cantidad };
+                indiceEditar = null;
+                document.getElementById("Boton").textContent = "Agregar";
+            }
+
+            Pintar();
+            LimpiarCampos();
+            actualizarPresupuesto();
+        }
+
+        function mostrarAlerta(title, text, icon) {
+            Swal.fire({
+                title: title,
+                text: text,
+                icon: icon
+            });
+        }
+
+        function Pintar() {
+            let cuerpoTabla = document.getElementById("CuerpoTabla");
+            cuerpoTabla.innerHTML = "";
+            data.forEach((element, index) => {
+                let tr = document.createElement("tr");
+
+                let tdGasto = document.createElement("td");
+                tdGasto.textContent = element.gasto;
+                tr.appendChild(tdGasto);
+
+                let tdCantidad = document.createElement("td");
+                tdCantidad.textContent = `${formatoMoneda(element.cantidad)}`;
+                tr.appendChild(tdCantidad);
+
+                let tdOpciones = document.createElement("td");
+
+                let editarBtn = document.createElement("button");
+                editarBtn.innerHTML = "Editar";
+                editarBtn.classList.add("btn-editar");
+                editarBtn.addEventListener("click", () => editarGasto(index));
+
+                let eliminarBtn = document.createElement("button");
+                eliminarBtn.innerHTML = "Eliminar";
+                eliminarBtn.classList.add("btn-eliminar");
+                eliminarBtn.addEventListener("click", () => eliminarGasto(index));
+
+                tdOpciones.appendChild(editarBtn);
+                tdOpciones.appendChild(eliminarBtn);
+                tr.appendChild(tdOpciones);
+
+                cuerpoTabla.appendChild(tr);
+            });
+        }
+
+        function editarGasto(index) {
+            let elemento = data[index];
+            document.getElementById("Nombre_Gasto").value = elemento.gasto;
+            document.getElementById("Cantidad").value = elemento.cantidad;
+            document.getElementById("Boton").textContent = "Editar";
+            indiceEditar = index;
+            document.getElementById("Boton").disabled = false;
+        }
+
+        function eliminarGasto(index) {
+            data.splice(index, 1);
+            Pintar();
+            actualizarPresupuesto();
+        }
+
+        function LimpiarCampos() {
+            document.getElementById("Nombre_Gasto").value = "";
+            document.getElementById("Cantidad").value = "";
+        }
+
+        function habilitarInputs() {
+            document.getElementById("Nombre_Gasto").disabled = false;
+            document.getElementById("Cantidad").disabled = false;
+            document.getElementById("Boton").disabled = false;
+        }
+    </script>
+
+    <style>
+        body {
+            margin: 0;
+            background: linear-gradient(to right, rgb(36, 36, 112), rgb(1, 8, 68));
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        #Titulo {
+            text-align: center;
+            margin-top: 5%;
+        }
+        .Contenedor {
+            background-color: white;
+            color: black;
+            display: flex;
+            justify-content: space-around;
+            margin: 5% auto;
+            padding: 15px;
+            border-radius: 10px;
+            width: 90%;
+        }
+        .Gastos, .Listado {
+            width: 45%;
+        }
+        #TGastos, #TListado {
+            text-align: center;
+        }
+        #Boton {
+            margin-top: 20px;
+            background-color: rgb(60, 60, 234);
+            color: white;
+            border-radius: 5px;
+            border: none;
+            padding: 10px;
+            cursor: pointer;
+        }
+        #Boton:hover {
+            background-color: rgb(40, 40, 180);
+        }
+        table {
+            border: 1px solid black;
+            border-collapse: collapse;
+            width: 100%;
+            text-align: left;
+        }
+        th, td {
+            padding: 8px;
+            border: 1px solid black;
+        }
+        .Pre, .Res {
+            display: grid;
+            padding: 10px;
+            align-content: center;
+            background-color: aqua;
+            border-radius: 5px;
+        }
+        .Res {
+            background-color: greenyellow;
+        }
+        .btn-editar {
+            background-color: green;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            margin-right: 5px;
+            border-radius: 3px;
+        }
+        .btn-editar:hover {
+            background-color: darkgreen;
+        }
+        .btn-eliminar {
+            background-color: red;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        .btn-eliminar:hover {
+            background-color: darkred;
+        }
+    </style>
+</body>
+</html>
